@@ -1,0 +1,774 @@
+<!-- copyright 2025 Alon Segal -->
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Piano Voicing Finder</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Include Tone.js library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
+    <style>
+        /* Base Styles from original app */
+        :root{
+            --bg-outer: linear-gradient(180deg,#0f1720 0%, #161923 40%, #0b0f12 100%);
+            --panel-bg: rgba(255,255,255,0.04);
+            --glass: rgba(255,255,255,0.03);
+            --accent-1: #6EE7B7;
+            --accent-2: #38BDF8;
+            --accent-3: #9B7CFF;
+            --muted: #9aa4b2;
+            --card-bg: #0f1620;
+            --text-on-dark: #E6EEF6;
+            --note-white: #ffffff;
+            --note-shadow: rgba(12,18,24,0.35);
+            --danger: #ef4444;
+            --glass-border: rgba(255,255,255,0.06);
+            --glass-glow: 0 6px 30px rgba(60,120,255,0.05);
+            --transition: 220ms cubic-bezier(.2,.9,.2,1);
+        }
+        html,body{
+            min-height: 100%; margin:0; font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+            -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; background: var(--bg-outer); color:var(--text-on-dark);
+            display:flex; align-items:flex-start; justify-content:center; padding: 28px;
+        }
+        .container{
+            width:100%; max-width:1160px; border-radius:18px; padding:26px; background: rgba(0, 0, 0, 0.8);
+            box-shadow: 0 10px 40px rgba(3,7,14,0.6), 0 1px 0 rgba(255,255,255,0.02) inset;
+            border: 1px solid rgba(255,255,255,0.03); position:relative; overflow:visible;
+        }
+        .logo-container{ display:flex; align-items:center; gap:2px; justify-content:center; margin-bottom:18px; }
+        .logo-title{ font-weight:450; font-size:28px; color:var(--text-on-dark); letter-spacing:0.0px; }
+        .logo-sub{ font-size:12px; color:var(--muted); margin-top:2px; }
+        .controls-row{
+            display:flex; gap:18px; align-items:center; justify-content:center; flex-wrap:wrap; padding:12px;
+            margin-bottom:18px; border-radius:12px; background: linear-gradient(90deg, rgba(255,255,255,0.01), rgba(255,255,255,0.00));
+            border:1px solid var(--glass-border); box-shadow: var(--glass-glow);
+        }
+        .vl-panel{ display:flex; gap:12px; align-items:center; justify-content:center; flex-direction:column; }
+        .vl-row{ display:flex; gap:14px; align-items:center; justify-content:center; flex-wrap:wrap; }
+        .vl-field{ display:flex; flex-direction:column; align-items:center; gap:8px; min-width:110px; }
+        .vl-field label{ font-size:12px; color:var(--muted); font-weight:700; }
+        .vl-field select, .vl-field input[type="number"]{
+            border-radius:10px; border:0; padding:10px 12px; background:linear-gradient(180deg,#ffffff,#f3f5f7);
+            color:#1b2430; font-weight:700; letter-spacing:0.6px; box-shadow: 0 6px 14px rgba(2,6,10,0.08);
+            min-width:110px; text-align:center;
+        }
+        .vl-field select:disabled, .vl-field input:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            background: #e9ecef;
+        }
+        .vl-direction{ display:flex; gap:8px; align-items:center; }
+        .vl-btn{
+            width:40px;height:40px;border-radius:9px;border:0; background:linear-gradient(180deg,#2b2f36,#1b1f24);
+            color:var(--text-on-dark); display:inline-grid;place-items:center; cursor:pointer;font-size:14px;font-weight:800;
+            transition:all var(--transition); box-shadow: 0 6px 14px rgba(0,0,0,0.4);
+        }
+        .vl-btn:disabled {
+             opacity: 0.5;
+             cursor: not-allowed;
+        }
+        .vl-btn:hover{ transform:translateY(-3px); }
+        .vl-btn.active{
+            background: linear-gradient(90deg,var(--accent-1), var(--accent-2)); color:#06202b;
+            box-shadow: 0 10px 30px rgba(56,189,248,0.12), 0 4px 0 rgba(0,0,0,0.25);
+        }
+        .current-voicing{ display:flex; align-items:center; justify-content:center; gap:16px; margin:10px 0 18px 0; flex-wrap:nowrap; }
+        .note-square{
+            width:76px;height:76px; min-width:76px; border-radius:14px; background:var(--note-white); color:#0b1220;
+            font-weight:900; font-size:28px; display:inline-flex; align-items:center; justify-content:center;
+            box-shadow: 0 12px 30px var(--note-shadow), 0 2px 0 rgba(0,0,0,0.12); border: 1px solid rgba(6,10,16,0.06);
+            transition: transform var(--transition), box-shadow var(--transition); outline:none; text-align:center; font-family: inherit;
+        }
+        .note-square::placeholder{ color:#9aa4b2; font-weight:800; }
+        .note-square:focus{ transform:translateY(-6px) scale(1.02); box-shadow: 0 18px 40px rgba(2,6,18,0.35); }
+        .side-btn{
+            height:76px; min-width:110px; border-radius:14px; border:0; cursor:pointer; font-weight:800; font-size:15px; color:#fff;
+            display:inline-flex; align-items:center; justify-content:center; letter-spacing:0.6px; transition:all var(--transition);
+            box-shadow: 0 12px 30px rgba(2,6,18,0.45);
+        }
+        .side-btn.prev-btn{ background: linear-gradient(180deg,#3f8fb0,#165a78); }
+        .side-btn.next-btn{ background: linear-gradient(180deg,#00b37a,#0e7b5e); }
+        .side-btn:hover{ transform:translateY(-4px); filter:brightness(1.03); }
+        .button-container{ 
+            display:flex; gap:14px; justify-content:center; align-items:center;
+            flex-wrap:wrap; margin-bottom:18px; 
+        }
+        .button-container button{
+            height:52px; padding:0 18px; border-radius:12px; border:0; cursor:pointer;
+            font-weight:800; letter-spacing:0.4px; box-shadow: 0 10px 26px rgba(2,6,18,0.45);
+            transition:all var(--transition);
+        }
+        .button-container button:hover{ transform:translateY(-4px); filter:brightness(1.04); }
+        .button-container button:disabled { opacity: 0.5; cursor: not-allowed; }
+        #show-voicing-button{ background: linear-gradient(90deg,var(--accent-1), var(--accent-2)); color:#042427; }
+        #play-voicing-button{ background: linear-gradient(90deg,#ff9a8b,#ff6a88); color:#000; }
+        
+        .small-button-group { display: flex; flex-direction: column; gap: 8px; }
+        .small-btn {
+            height: 24px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--glass-border);
+            background: linear-gradient(180deg,#2b2f36,#1b1f24); color: var(--text-on-dark);
+            font-size: 12px; font-weight: 700; cursor: pointer; transition: all var(--transition);
+        }
+        .small-btn:hover { background: var(--accent-3); color: #000; }
+
+        .output-section{ display:flex; flex-direction:column; align-items:center; gap:12px; margin-bottom:18px; }
+        .voicing-info{
+            margin-top:12px; width:100%; border-radius:8px; padding:12px 14px; background: rgba(4,8,12,0.55);
+            border: 2px solid rgba(64,200,145,0.18); color: var(--text-on-dark); box-shadow: 0 8px 24px rgba(2,6,18,0.45);
+            font-size:13px; line-height:1.4; max-width:100%; box-sizing: border-box;
+        }
+        .voicing-info .label{ font-weight:800; color:var(--accent-2); margin-right:8px; }
+        .voicing-info .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", "Segoe UI Mono", monospace; color:#e6f7ef; }
+        .voicing-info .row{ margin-bottom:6px; }
+        .voicing-info .dismiss{ float:right; background:transparent;border:0;color:var(--muted);cursor:pointer;font-weight:700;font-size:14px; }
+
+        /* New Piano Styles */
+        #piano-keyboard-container {
+            width: 100%;
+            max-width: 900px;
+            height: 200px;
+            background: linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.00));
+            border:1px solid rgba(255,255,255,0.02);
+            box-shadow: 0 12px 40px rgba(3,7,14,0.6);
+            border-radius: 12px;
+            padding: 20px;
+            box-sizing: border-box;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow-x: auto;
+        }
+        .piano {
+            display: flex;
+            position: relative;
+            height: 100%;
+        }
+        .piano-key {
+            position: relative;
+            border: 1px solid #333;
+            border-radius: 0 0 5px 5px;
+            box-shadow: inset 0 -5px 5px rgba(0,0,0,0.1);
+            cursor: pointer;
+            transition: background-color 150ms ease;
+        }
+        .piano-key.white {
+            background-color: #f8f9fa;
+            width: 35px;
+            height: 100%;
+            z-index: 1;
+        }
+        .piano-key.black {
+            background-color: #212529;
+            width: 21px;
+            height: 60%;
+            margin-left: -10.5px;
+            margin-right: -10.5px;
+            z-index: 2;
+        }
+        .piano-key.pressed {
+            background: linear-gradient(180deg, var(--accent-2), var(--accent-1));
+            box-shadow: inset 0 0 10px rgba(255,255,255,0.5), 0 0 20px var(--accent-2);
+        }
+        .piano-key .note-label {
+            position: absolute;
+            bottom: 8px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 10px;
+            font-weight: bold;
+            color: #333;
+            pointer-events: none;
+        }
+        .piano-key.black .note-label {
+            color: #eee;
+            font-size: 9px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+       <div class="logo-container">
+          <svg width="70" height="70" viewBox="0 0 80 80" aria-hidden="true">
+             <g transform="translate(40, 40) scale(1)">
+                <path d="M 0,-30 C -20,-20 -20,10 0,0" fill="#38BDF8" /> 
+                <path d="M 0,-30 C 20,-20 20,10 0,0" fill="#38BDF8" /> 
+                <g transform="rotate(90)"><path d="M 0,-30 C -20,-20 -20,10 0,0" fill="#6EE7B7" /><path d="M 0,-30 C 20,-20 20,10 0,0" fill="#6EE7B7" /></g>
+                <g transform="rotate(180)"><path d="M 0,-30 C -20,-20 -20,10 0,0" fill="#9B7CFF" /><path d="M 0,-30 C 20,-20 20,10 0,0" fill="#9B7CFF" /></g>
+                <g transform="rotate(270)"><path d="M 0,-30 C -20,-20 -20,10 0,0" fill="#ef4444" /><path d="M 0,-30 C 20,-20 20,10 0,0" fill="#ef4444" /></g>
+                <circle cx="0" cy="0" r="8" fill="#1E293B" stroke="#475569" stroke-width="2"/>
+            </g>
+          </svg>
+          <div>
+              <div class="logo-title">Piano Voicing Finder</div>
+              <div class="logo-sub">Fast chord predictions for keyboard</div>
+          </div>
+        </div>
+
+        <div class="controls-row" role="region" aria-label="Voice leading controls">
+            <div class="vl-panel">
+                <div class="vl-row">
+                    <div class="vl-field">
+                        <label for="scaleRoot">Scale Root</label>
+                        <select id="scaleRoot" aria-label="Scale Root">
+                            <option>C</option><option>C#</option><option>Db</option>
+                            <option>D</option><option>D#</option><option>Eb</option>
+                            <option>E</option><option>F</option><option>F#</option>
+                            <option>Gb</option><option>G</option><option>G#</option>
+                            <option>Ab</option><option>A</option><option>A#</option>
+                            <option>B</option>
+                        </select>
+                    </div>
+
+                    <div class="vl-field">
+                        <label for="scaleType">Scale Type</label>
+                        <select id="scaleType" aria-label="Scale Type">
+                            <option value="major">Major</option>
+                            <option value="minor">Minor</option>
+                            <option value="harmonic minor">Harmonic Minor</option>
+                            <option value="melodic minor">Melodic Minor</option>
+                            <option value="barry harris major">Barry Harris Major</option>
+                            <option value="barry harris minor">Barry Harris Minor</option>
+                        </select>
+                    </div>
+
+                    <div class="vl-field">
+                        <label for="chordType">Chord Type</label>
+                        <select id="chordType" aria-label="Chord Type">
+                            <option value="triadic_7th" selected>Triadic/7th Chords (Default)</option>
+                            <option value="barry-harris-6th-dim">Barry Harris 6th-Diminished</option>
+                            <option value="3_part_4ths">3-part 4ths</option>
+                            <option value="4_part_4ths">4-part 4ths</option>
+                            <option value="tbn_1">TBN I (Triad/Bass Note)</option>
+                        </select>
+                    </div>
+                    <div class="vl-field">
+                        <label for="voicingTypeSelect">Voicing Type</label>
+                        <select id="voicingTypeSelect" aria-label="Voicing Type">
+                            <option value="default_close" selected>Default (Close)</option>
+                            <option value="drop3">Drop 3</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="vl-row">
+                    <div class="vl-field">
+                        <label for="cycle">Cycle</label>
+                        <select id="cycle" aria-label="Cycle">
+                            <option value="1" selected>2</option>
+                            <option value="2">3</option>
+                            <option value="3">4</option>
+                            <option value="4">5</option>
+                            <option value="5">6</option>
+                            <option value="6">7</option>
+                        </select>
+                    </div>
+
+                    <div class="vl-field">
+                        <label for="vlInterval">VL Interval</label>
+                        <input id="vlInterval" type="number" value="2" min="0" max="7" />
+                    </div>
+
+                    <div class="vl-field">
+                        <label>Direction</label>
+                        <div class="vl-direction" role="group" aria-label="Voice leading direction">
+                            <button type="button" class="vl-btn" data-val="-1" id="vlDown" title="Down">▼</button>
+                            <button type="button" class="vl-btn" data-val="0" id="vlNeutral" title="Neutral">•</button>
+                            <button type="button" class="vl-btn" data-val="1" id="vlUp" title="Up">▲</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="current-voicing" aria-label="Current voicing">
+            <button id="predictPrev" class="side-btn prev-btn" aria-label="Prev Chord">◀ Prev</button>
+            <input type="text" id="note1" class="note-square" placeholder="G" aria-label="Note 1">
+            <input type="text" id="note2" class="note-square" placeholder="C" aria-label="Note 2">
+            <input type="text" id="note3" class="note-square" placeholder="E" aria-label="Note 3">
+            <input type="text" id="note4" class="note-square" placeholder="A" aria-label="Note 4">
+            <button id="predictNext" class="side-btn next-btn" aria-label="Next Chord">Next ▶</button>
+        </div>
+
+        <div class="button-container" role="group" aria-label="Actions">
+            <div class="small-button-group">
+                <button id="first-button" class="small-btn">First</button>
+                <button id="clear-button" class="small-btn">Clear</button>
+            </div>
+            <button id="show-voicing-button"><i class="fa-solid fa-eye"></i>&nbsp;&nbsp;Show Voicing</button>
+            <button id="play-voicing-button"><i class="fa-solid fa-play"></i>&nbsp;&nbsp;Play Chord</button>
+        </div>
+
+        <div class="output-section" role="region" aria-label="Voicing output">
+            <div id="piano-keyboard-container">
+                <!-- The piano will be drawn here by JavaScript -->
+            </div>
+            <div id="voicing-info" class="voicing-info" aria-live="polite" hidden></div>
+        </div>
+    </div>
+
+    <script>
+    // =================================================
+    //          harmonicEngine.js (The Brain)
+    // =================================================
+    let vl_lastQuartalBaseDegree = null;
+    let vl_lastQuartalNames = null;
+    let vl_lastTBN_BassDegree = null;
+    let vl_lastTBN_BassNoteName = null;
+    const vl_notesMap = { 'C':0,'C#':1,'DB':1,'D':2,'D#':3,'EB':3,'E':4,'F':5,'F#':6,'GB':6,'G':7,'G#':8,'AB':8,'A':9,'A#':10,'BB':10,'B':11 };
+    const vl_noteNames = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+    const vl_scales = {
+        'major': [0,2,4,5,7,9,11], 
+        'minor': [0,2,3,5,7,8,10], 
+        'harmonic minor': [0,2,3,5,7,8,11], 
+        'melodic minor': [0,2,3,5,7,9,11],
+        'barry harris major': [0,2,4,5,7,8,9,11],
+        'barry harris minor': [0,2,3,5,7,8,9,11]
+    };
+    const vl_chordStructures = { 'maj7':[0,4,7,11],'m7':[0,3,7,10],'7':[0,4,7,10],'m7b5':[0,3,6,10], 'm(maj7)': [0,3,7,11],'maj7(#5)': [0,4,8,11],'dim7': [0,3,6,9], 'maj6': [0,4,7,9], 'min6': [0,3,7,9], 'maj': [0,4,7],'min': [0,3,7],'dim': [0,3,6],'aug': [0,4,8] };
+    const vl_diatonicChords = { 'major': ['maj7','m7','m7','maj7','7','m7','m7b5'], 'minor': ['m7','m7b5','maj7','m7','m7','maj7','7'], 'harmonic minor': ['m(maj7)','m7b5','maj7(#5)','m7','7','maj7','dim7'], 'melodic minor': ['m(maj7)','m7','maj7(#5)','7','7','m7b5','m7b5'] };
+    const vl_diatonicTriads = { 'major': ['maj','min','min','maj','maj','min','dim'], 'minor': ['min','dim','maj','min','min','maj','maj'], 'harmonic minor':['min','dim','aug','min','maj','maj','dim'], 'melodic minor': ['min','min','aug','maj','maj','dim','dim'] };
+    function vl_normalize(s){ if(!s) return ''; let str = String(s).trim().replace(/♭/g,'b').replace(/♯/g,'#').replace(/\s+/g,''); if(str.length===0) return ''; const first = str.charAt(0).toUpperCase(); const rest = str.slice(1).toLowerCase(); return first + rest; }
+    function vl_pc(raw){ const n = vl_normalize(raw); if(!n) return -1; const key = n.toUpperCase(); return (vl_notesMap[key] !== undefined) ? vl_notesMap[key] : -1; }
+    function vl_nameFromPc(v){ return vl_noteNames[((v%12)+12)%12]; }
+    function vl_getScale(root, type){ const struct = vl_scales[type.toLowerCase()]; const rv = vl_pc(root); if(!struct || rv < 0) return null; return struct.map(i => vl_nameFromPc(rv + i)); }
+    function buildQuartalChord(rootNote, scaleSpec, count){ if(!rootNote || !scaleSpec || !Number.isInteger(count) || count <= 0) throw new Error('Invalid input for buildQuartalChord'); const rn = vl_normalize(rootNote); let scaleRoot = rn; let scaleType = String(scaleSpec).trim(); const tokens = scaleType.split(/\s+/).filter(Boolean); if(tokens.length > 1 && vl_pc(tokens[0]) !== -1){ scaleRoot = vl_normalize(tokens[0]); scaleType = tokens.slice(1).join(' '); } const scaleNotes = vl_getScale(scaleRoot, scaleType); if(!scaleNotes) throw new Error(`unknown scale: ${scaleRoot} ${scaleType}`); const startIdx = scaleNotes.findIndex(s => String(s).toUpperCase() === String(rn).toUpperCase()); if(startIdx === -1) throw new Error(`${rootNote} is not diatonic to ${scaleRoot} ${scaleType}`); const chord = []; let idx = startIdx; for(let i=0;i<count;i++){ chord.push(scaleNotes[idx % scaleNotes.length]); idx += 3; } return chord; }
+    function getDiatonicTriadQuality(triadRootNote, scaleRoot, scaleType) { const scaleNotes = vl_getScale(scaleRoot, scaleType); if(!scaleNotes) throw new Error(`Invalid scale: ${scaleRoot} ${scaleType}`); const rootNorm = vl_normalize(triadRootNote); const rootIdx = scaleNotes.findIndex(s => String(s).toUpperCase() === String(rootNorm).toUpperCase()); if(rootIdx === -1) throw new Error(`${triadRootNote} is not in scale ${scaleRoot} ${scaleType}`); const triadNotes = [ scaleNotes[rootIdx], scaleNotes[(rootIdx + 2) % scaleNotes.length], scaleNotes[(rootIdx + 4) % scaleNotes.length] ]; const triadPcs = triadNotes.map(vl_pc); const rootPc = triadPcs[0]; const intervals = triadPcs.map(pc => ((pc - rootPc + 12) % 12)); intervals.sort((a,b) => a - b); const majIntervals = [0, 4, 7]; const minIntervals = [0, 3, 7]; const dimIntervals = [0, 3, 6]; const intervalsStr = JSON.stringify(intervals); if(intervalsStr === JSON.stringify(majIntervals)) return 'maj'; if(intervalsStr === JSON.stringify(minIntervals)) return 'min'; if(intervalsStr === JSON.stringify(dimIntervals)) return 'dim'; return 'maj'; }
+    function buildTBN_I_Chord(bassNote, scaleRoot, scaleType) { const scaleNotes = vl_getScale(scaleRoot, scaleType); if(!scaleNotes) throw new Error(`Invalid scale: ${scaleRoot} ${scaleType}`); const bassNorm = vl_normalize(bassNote); const bassIdx = scaleNotes.findIndex(s => String(s).toUpperCase() === String(bassNorm).toUpperCase()); if(bassIdx === -1) throw new Error(`${bassNote} is not in scale ${scaleRoot} ${scaleType}`); const triadRootIdx = (bassIdx + 4) % scaleNotes.length; const triadRoot = scaleNotes[triadRootIdx]; const triadQuality = getDiatonicTriadQuality(triadRoot, scaleRoot, scaleType); const triad3rdIdx = (triadRootIdx + 2) % scaleNotes.length; const triad5thIdx = (triadRootIdx + 4) % scaleNotes.length; const triadRootNote = scaleNotes[triadRootIdx]; const triad3rdNote = scaleNotes[triad3rdIdx]; const triad5thNote = scaleNotes[triad5thIdx]; const bassPc = vl_pc(bassNote); const triad3rdPc = vl_pc(triad3rdNote); const triadRootPc = vl_pc(triadRootNote); const triad5thPc = vl_pc(triad5thNote); return [bassPc, triadRootPc, triad3rdPc, triad5thPc]; }
+    function vl_identifyChord(notes){ const pcs = [...new Set(notes.map(vl_normalize).filter(Boolean).map(vl_pc).filter(v=>v>=0))].sort((a,b)=>a-b); if(pcs.length < 3) return null; for(const rootName of vl_noteNames){ const r = vl_pc(rootName); for(const type in vl_chordStructures){ const structure = vl_chordStructures[type]; const chordPc = structure.map(i => ((r + i)%12+12)%12).sort((a,b)=>a-b); if(chordPc.length===pcs.length && chordPc.every((v,i)=>v===pcs[i])){ return { root: rootName, type, notes: chordPc.map(vl_nameFromPc) }; } } } return null; }
+    function vl_indicesInScale(pcVal, scalePcs){ const res=[]; for(let i=0;i<scalePcs.length;i++){ if(((scalePcs[i]%12)+12)%12 === ((pcVal%12)+12)%12) res.push(i); } return res; }
+    function vl_findClosestInDirection(startRaw, targetPcs, dir, thresholdSteps, usedSet, scalePcs){ const startPc = vl_pc(startRaw); if(startPc<0) return null; const startIdxs = vl_indicesInScale(startPc, scalePcs); const sIdxCandidates = startIdxs.length?startIdxs:[0]; let best=null, bestSteps=Infinity; for(const tpc of targetPcs){ if(usedSet.has(tpc)) continue; const tIdxs = vl_indicesInScale(tpc, scalePcs); const tIdxCandidates = tIdxs.length?tIdxs:[0]; for(const si of sIdxCandidates){ for(const ti of tIdxCandidates){ for(let k=-1;k<=1;k++){ const stepsUp = (ti - si) + k*7; const stepsDown = -stepsUp; if(dir === 1 && stepsUp > 0 && stepsUp <= thresholdSteps && stepsUp < bestSteps){ bestSteps = stepsUp; best = tpc; } else if(dir === -1 && stepsDown > 0 && stepsDown <= thresholdSteps && stepsDown < bestSteps){ bestSteps = stepsDown; best = tpc; } else if(dir === 0){ const absSteps = Math.abs(stepsUp); if(absSteps <= thresholdSteps && absSteps < bestSteps){ bestSteps = absSteps; best = tpc; } } } } } } if(best === null && dir !== 0){ for(const tpc of targetPcs){ if(usedSet.has(tpc)) continue; if(((tpc%12)+12)%12 === ((startPc%12)+12)%12){ best = tpc; break; } } } return best; }
+    function vl_mapVoices(inputVoices, nextChordPcs, dir, vlThresholdSteps, frozenPcsSet, scalePcs){ const assigned = new Array(inputVoices.length).fill(null); const used = new Set(); for(let i=0;i<inputVoices.length;i++){ const raw = inputVoices[i]; const vpc = vl_pc(raw); if(vpc >= 0 && frozenPcsSet.has(vpc)){ if(nextChordPcs.includes(vpc) && !used.has(vpc)){ assigned[i]=vpc; used.add(vpc); continue; } const pick = vl_findClosestInDirection(raw, nextChordPcs, 0, 7, used, scalePcs); if(pick!==null){ assigned[i]=pick; used.add(pick); } } } for(let i=0;i<inputVoices.length;i++){ if(assigned[i] !== null) continue; const raw = inputVoices[i]; const pick = vl_findClosestInDirection(raw, nextChordPcs, dir, vlThresholdSteps, used, scalePcs); if(pick !== null){ assigned[i]=pick; used.add(pick); } } for(let i=0;i<assigned.length;i++){ if(assigned[i]===null){ const available = nextChordPcs.filter(p=>!used.has(p)); if(available.length>0){ assigned[i]=available[0]; used.add(available[0]); } } } return assigned.filter(v=>v!==null); }
+    function applyVoicingTransformation(pitchClasses, voicingType, scaleRoot, scaleType){ if(!pitchClasses || !Array.isArray(pitchClasses)) return pitchClasses; if(!voicingType || voicingType === 'default_close') return pitchClasses; if(voicingType === 'drop3'){ return transformToDrop3(pitchClasses, scaleRoot, scaleType); } return pitchClasses; }
+    function transformToDrop3(pitchClasses, scaleRoot, scaleType){ try { if(!pitchClasses || !Array.isArray(pitchClasses)) return pitchClasses; const pcs = pitchClasses.slice(); if(pcs.length < 3) return pcs; const uniquePcs = pcs.map(p=>((p%12)+12)%12); const indexed = uniquePcs.map((v,i)=>({v,i,orig:pcs[i]})); indexed.sort((a,b)=> a.v - b.v || a.i - b.i); const sorted = indexed.map(x=>x.v); const idxToDrop = Math.max(0, sorted.length - 2); if(sorted.length < 3) return pcs; const droppedPc = sorted.splice(idxToDrop, 1)[0]; const transformed = [...sorted, droppedPc]; return transformed; } catch (e) { console.error('transformToDrop3 failed', e); return pitchClasses; } }
+    function vl_diatonicChordPcs(scaleRoot, scaleType, degree, chordFamily='7th'){ const scale = vl_getScale(scaleRoot, scaleType); if(!scale) return null; let mapScaleType = scaleType; if (scaleType === 'barry harris major') { mapScaleType = 'major'; } else if (scaleType === 'barry harris minor') { mapScaleType = 'melodic minor'; } const idx = (degree-1+scale.length)%scale.length; let chordType; if(chordFamily === 'triad'){ const map = vl_diatonicTriads[mapScaleType]; if(!map) return null; chordType = map[idx % 7]; } else { const map = vl_diatonicChords[mapScaleType]; if(!map) return null; chordType = map[idx % 7]; } if (!chordType) return null; const structure = vl_chordStructures[chordType]; if(!structure) return null; const rootPc = vl_pc(scale[idx]); return structure.map(i => ((rootPc + i) % 12 + 12)%12); }
+    function runPredict(uiState) { const { scaleRoot, scaleType, cycleVal, vlInterval, vlDir, inputVoices, chordTypeVal, voicingTypeVal, harmonicDirection } = uiState; let chordIdent = null; let chordFamily = '7th'; let targetDegree = null; let scale = vl_getScale(scaleRoot, scaleType); if(!scale){ return { error: 'Error: invalid scale', finalNames: [], info: {} }; } const scaleSize = scale.length; if (chordTypeVal === 'barry-harris-6th-dim') { return predictBarryHarrisStep(uiState); } if (chordTypeVal === 'triadic_7th') { chordIdent = vl_identifyChord(inputVoices); if(!chordIdent){ return { error: 'Error: cannot identify current chord.', finalNames: [], info: {} }; } const curRootPc = vl_pc(chordIdent.root); let curDegreeIndex = scale.map(vl_pc).indexOf(curRootPc); if(curDegreeIndex === -1){ return { error: 'Error: starting chord root not in scale.', finalNames: [], info: {} }; } const struct = vl_chordStructures[chordIdent.type]; chordFamily = (struct && struct.length === 3) ? 'triad' : '7th'; targetDegree = ((curDegreeIndex + (cycleVal * harmonicDirection)) % scaleSize + scaleSize) % scaleSize + 1; } else if (chordTypeVal === '3_part_4ths' || chordTypeVal === '4_part_4ths') { const inputNormalized = inputVoices.filter(Boolean); if(!inputNormalized || inputNormalized.length === 0){ return { error: 'Error: no input notes to infer base note.', finalNames: [], info: {} }; } let baseDegreeIndex = -1; const inputPcs = inputNormalized.map(vl_pc).filter(v=>v>=0); if (vl_lastQuartalBaseDegree !== null && vl_lastQuartalNames && vl_lastQuartalNames.length) { const lastPcs = vl_lastQuartalNames.map(vl_pc).filter(v=>v>=0); if (inputPcs.length>0 && inputPcs.every(p => lastPcs.includes(p))) { baseDegreeIndex = vl_lastQuartalBaseDegree; } } if (baseDegreeIndex === -1) { const baseNote = inputVoices[0] || inputNormalized[0]; const basePc = vl_pc(baseNote); baseDegreeIndex = scale.map(vl_pc).indexOf(basePc); if(baseDegreeIndex === -1){ baseDegreeIndex = scale.findIndex(s=> vl_normalize(s).toUpperCase() === vl_normalize(baseNote).toUpperCase()); } if(baseDegreeIndex === -1){ baseDegreeIndex = 0; } vl_lastQuartalBaseDegree = baseDegreeIndex; vl_lastQuartalNames = null; } const targetBaseDegree = ((baseDegreeIndex + (cycleVal * harmonicDirection)) % scaleSize + scaleSize) % scaleSize; targetDegree = targetBaseDegree + 1; chordIdent = { root: scale[targetBaseDegree], type: (chordTypeVal === '3_part_4ths' ? 'quartal-3' : 'quartal-4') }; } else if (chordTypeVal === 'tbn_1') { const inputNormalized = inputVoices.filter(Boolean); if (!inputNormalized || inputNormalized.length === 0) { return { error: 'Error: no input notes to infer base note.', finalNames: [], info: {} }; } if (!scale) { return { error: 'Error: invalid scale', finalNames: [], info: {} }; } let currentBaseDegreeIndex; if (vl_lastTBN_BassDegree !== null) { currentBaseDegreeIndex = vl_lastTBN_BassDegree; } else { const currentBaseNote = vl_normalize(inputVoices[0]) || inputNormalized[0]; const currentBasePc = vl_pc(currentBaseNote); currentBaseDegreeIndex = scale.map(vl_pc).indexOf(currentBasePc); if (currentBaseDegreeIndex === -1) { currentBaseDegreeIndex = scale.findIndex(s => vl_normalize(s).toUpperCase() === vl_normalize(currentBaseNote).toUpperCase()); } if (currentBaseDegreeIndex === -1) { currentBaseDegreeIndex = 0; } } const targetBaseDegree = ((currentBaseDegreeIndex + (cycleVal * harmonicDirection)) % scale.length + scale.length) % scale.length; const targetBassNoteName = scale[targetBaseDegree]; vl_lastTBN_BassDegree = targetBaseDegree; vl_lastTBN_BassNoteName = targetBassNoteName; targetDegree = targetBaseDegree + 1; chordIdent = { root: targetBassNoteName, type: 'TBN I' }; } else { return { error: 'Error: unknown chord type selection.', finalNames: [], info: {} }; } let nextChordPcs = null; let quartalNamesOutside = null; try { if (chordTypeVal === 'triadic_7th') { nextChordPcs = vl_diatonicChordPcs(scaleRoot, scaleType, targetDegree, chordFamily); } else if (chordTypeVal === '3_part_4ths' || chordTypeVal === '4_part_4ths') { const rootNoteForTarget = scale[(targetDegree - 1 + scaleSize) % scaleSize]; const scaleSpec = `${scaleRoot} ${scaleType}`; const count = (chordTypeVal === '3_part_4ths') ? 3 : 4; const quartalNames = buildQuartalChord(rootNoteForTarget, scaleSpec, count); quartalNamesOutside = quartalNames; vl_lastQuartalBaseDegree = (targetDegree - 1 + scaleSize) % scaleSize; vl_lastQuartalNames = quartalNamesOutside.slice(); nextChordPcs = quartalNames.map(n => vl_pc(n)).filter(v => v >= 0); } else if (chordTypeVal === 'tbn_1') { const targetBaseNote = scale[(targetDegree - 1 + scale.length) % scale.length]; nextChordPcs = buildTBN_I_Chord(targetBaseNote, scaleRoot, scaleType); } } catch (err) { return { error: `Error building chord: ${err.message}`, finalNames: [], info: {} }; } if(!nextChordPcs || nextChordPcs.length === 0){ return { error: 'Error building target chord.', finalNames: [], info: {} }; } try { nextChordPcs = applyVoicingTransformation(nextChordPcs, voicingTypeVal, scaleRoot, scaleType) || nextChordPcs; } catch (e) { console.error('Voicing transform failed', e); } if (!(chordTypeVal === '3_part_4ths' || chordTypeVal === '4_part_4ths' || chordTypeVal === 'tbn_1')) { vl_lastQuartalBaseDegree = null; vl_lastQuartalNames = null; vl_lastTBN_BassDegree = null; vl_lastTBN_BassNoteName = null; } if (chordTypeVal === '3_part_4ths' || chordTypeVal === '4_part_4ths') { vl_lastTBN_BassDegree = null; vl_lastTBN_BassNoteName = null; } else if (chordTypeVal === 'tbn_1') { vl_lastQuartalBaseDegree = null; vl_lastQuartalNames = null; } const startPcs = inputVoices.map(vl_pc).filter(v=>v>=0); const nextSet = new Set(nextChordPcs); const autoFrozenSet = new Set(startPcs.filter(p=> nextSet.has(p))); const combinedFrozenSet = new Set([...autoFrozenSet]); const scalePcs = scale.map(vl_pc); const activeInputVoices = inputVoices.filter(v=>v && v.length>0); let mappedPcs, finalNames; if (chordTypeVal === 'tbn_1') { const currentPcs = activeInputVoices.map(vl_pc).filter(v => v >= 0); const nextPcsSet = new Set(nextChordPcs); const result = new Array(4).fill(null); const usedNextPcs = new Set(); for (let i = 0; i < Math.min(4, currentPcs.length); i++) { const currentPc = currentPcs[i]; if (nextPcsSet.has(currentPc)) { result[i] = currentPc; usedNextPcs.add(currentPc); } } const remainingPcs = nextChordPcs.filter(pc => !usedNextPcs.has(pc)); for (let i = 0; i < 4; i++) { if (result[i] === null && i < currentPcs.length) { const currentNote = vl_nameFromPc(currentPcs[i]); const bestMatch = vl_findClosestInDirection(currentNote, remainingPcs, vlDir, vlInterval, usedNextPcs, scalePcs); if (bestMatch !== null) { result[i] = bestMatch; usedNextPcs.add(bestMatch); } } } for (let i = 0; i < 4; i++) { if (result[i] === null) { const available = nextChordPcs.filter(pc => !usedNextPcs.has(pc)); if (available.length > 0) { result[i] = available[0]; usedNextPcs.add(available[0]); } } } mappedPcs = result.filter(v => v !== null); finalNames = mappedPcs.map(vl_nameFromPc); } else { mappedPcs = vl_mapVoices(activeInputVoices, nextChordPcs, vlDir, vlInterval, combinedFrozenSet, scalePcs); finalNames = mappedPcs.map(vl_nameFromPc); } if (chordTypeVal === '3_part_4ths' || chordTypeVal === '4_part_4ths') { const arranged = [...finalNames]; if (quartalNamesOutside && quartalNamesOutside.length) { quartalNamesOutside.forEach(q => { if (!arranged.includes(q)) arranged.push(q); }); } finalNames = [arranged[0]||null, arranged[1]||null, arranged[2]||null, arranged[3]||null].filter(Boolean); } else if (chordTypeVal === 'tbn_1') { finalNames = [ finalNames[0] || '', finalNames[1] || '', finalNames[2] || '', finalNames[3] || '' ]; } const info = { title: `Predicted: ${chordIdent.root} → degree ${targetDegree}`, targetDegree: `${targetDegree} (${scaleType})`, targetChordPcs: nextChordPcs, autoFrozen: Array.from(combinedFrozenSet), predictedVoicing: finalNames, }; return { error: null, finalNames: finalNames, info: info }; }
+    function predictBarryHarrisStep(uiState) { const { scaleRoot, scaleType, inputVoices, harmonicDirection } = uiState; const scale = vl_getScale(scaleRoot, scaleType); if (!scale || scale.length !== 8) { return { error: 'This mode requires a Barry Harris scale.', finalNames: [], info: {} }; } const isMajor = scaleType.includes('major'); const tonicChordType = isMajor ? 'maj6' : 'min6'; const passingChordType = 'dim7'; const tonicPcs = vl_chordStructures[tonicChordType].map(i => (vl_pc(scaleRoot) + i) % 12); const passingPcs = vl_chordStructures[passingChordType].map(i => (vl_pc(scale[7]) + i) % 12); const currentPcs = inputVoices.map(vl_pc).filter(pc => pc !== -1); if (currentPcs.length < 3) { return { error: 'Enter a valid starting chord.', finalNames: [], info: {} }; } const isTonic = currentPcs.every(pc => tonicPcs.includes(pc)); const isPassing = currentPcs.every(pc => passingPcs.includes(pc)); if (!isTonic && !isPassing) { return { error: 'Starting chord is not the tonic 6th or passing diminished.', finalNames: [], info: {} }; } const currentAbsolutePitches = resolveAbsolutePitches(inputVoices, []); const topPitch = Math.max(...currentAbsolutePitches); const topPc = topPitch % 12; const topNoteIndexInScale = scale.map(vl_pc).indexOf(topPc); if (topNoteIndexInScale === -1) { return { error: 'Top note not in scale.', finalNames: [], info: {} }; } const nextTopNoteIndex = (topNoteIndexInScale + harmonicDirection + scale.length) % scale.length; const nextTopNoteName = scale[nextTopNoteIndex]; const nextTopPc = vl_pc(nextTopNoteName); const isNextTonic = isPassing; let newChordPcs; let chordName; if (isNextTonic) { newChordPcs = tonicPcs; chordName = `${scaleRoot}${tonicChordType}`; } else { newChordPcs = passingPcs; chordName = `${scale[7]}${passingChordType}`; } const newChordVoicing = []; newChordVoicing.push(nextTopNoteName); let lastNotePc = nextTopPc; for (let i = 0; i < 3; i++) { const availableNotes = newChordPcs.filter(pc => !newChordVoicing.map(vl_pc).includes(pc)); let bestNextNotePc = -1; let minDistance = Infinity; for (const notePc of availableNotes) { let distance = lastNotePc - notePc; if (distance < 0) distance += 12; if (distance < minDistance) { minDistance = distance; bestNextNotePc = notePc; } } if (bestNextNotePc !== -1) { newChordVoicing.push(vl_nameFromPc(bestNextNotePc)); lastNotePc = bestNextNotePc; } } const finalNames = newChordVoicing.reverse(); const info = { title: `Barry Harris Harmonization`, predictedVoicing: finalNames, chordName: chordName }; return { error: null, finalNames, info }; }
+
+    // =================================================
+    //          pianoView.js (The Body)
+    // =================================================
+    let pianoSampler;
+    let soundsLoaded = false;
+    let currentPianoStartOctave = -1; 
+    const noteNamesFromPitch = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+
+    function setupPianoSampler(callback) {
+        pianoSampler = new Tone.Sampler({
+            urls: { A0: "A0.mp3", C1: "C1.mp3", "D#1": "Ds1.mp3", "F#1": "Fs1.mp3", A1: "A1.mp3", C2: "C2.mp3", "D#2": "Ds2.mp3", "F#2": "Fs2.mp3", A2: "A2.mp3", C3: "C3.mp3", "D#3": "Ds3.mp3", "F#3": "Fs3.mp3", A3: "A3.mp3", C4: "C4.mp3", "D#4": "Ds4.mp3", "F#4": "Fs4.mp3", A4: "A4.mp3", C5: "C5.mp3", "D#5": "Ds5.mp3", "F#5": "Fs5.mp3", A5: "A5.mp3", C6: "C6.mp3", "D#6": "Ds6.mp3", "F#6": "Fs6.mp3", A6: "A6.mp3", C7: "C7.mp3", "D#7": "Ds7.mp3", "F#7": "Fs7.mp3", A7: "A7.mp3", C8: "C8.mp3" },
+            release: 1,
+            baseUrl: "https://tonejs.github.io/audio/salamander/"
+        }).toDestination();
+
+        Tone.loaded().then(() => {
+            soundsLoaded = true;
+            if (callback) callback();
+        });
+    }
+
+    function createPianoKeyboard(container, numOctaves, startOctave) {
+        container.innerHTML = '';
+        const piano = document.createElement('div');
+        piano.className = 'piano';
+        container.appendChild(piano);
+        const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+        
+        for (let o = 0; o < numOctaves; o++) {
+            const octave = startOctave + o;
+            notes.forEach((note, i) => {
+                const key = document.createElement('div');
+                const isBlack = note.includes('#');
+                const noteName = `${note}${octave}`;
+                const pitch = octave * 12 + i;
+
+                key.className = `piano-key ${isBlack ? 'black' : 'white'}`;
+                key.dataset.note = noteName;
+                key.dataset.pitch = pitch;
+
+                const label = document.createElement('span');
+                label.className = 'note-label';
+                label.textContent = noteName;
+                if (!isBlack) key.appendChild(label);
+                piano.appendChild(key);
+            });
+        }
+        currentPianoStartOctave = startOctave;
+    }
+
+    function resolveAbsolutePitches(targetNoteNames, previousPitches) {
+        if (!targetNoteNames || targetNoteNames.length === 0) {
+            return [];
+        }
+
+        let finalPitches;
+
+        if (!previousPitches || previousPitches.length === 0) {
+            const firstNotePc = vl_pc(targetNoteNames[0]);
+            let startPitch = 3 * 12 + firstNotePc; 
+            
+            const resolvedPitches = [startPitch];
+            for (let i = 1; i < targetNoteNames.length; i++) {
+                const pc = vl_pc(targetNoteNames[i]);
+                const prevPitch = resolvedPitches[i-1];
+                let nextPitch = prevPitch - (prevPitch % 12) + pc;
+                if (nextPitch < prevPitch) {
+                    nextPitch += 12;
+                }
+                resolvedPitches.push(nextPitch);
+            }
+            finalPitches = resolvedPitches;
+        } else {
+            const avgPrevPitch = previousPitches.reduce((a, b) => a + b, 0) / previousPitches.length;
+            let bestCandidate = [];
+            let minTotalDistance = Infinity;
+            const startOctaveGuess = Math.round(avgPrevPitch / 12);
+
+            for (let o = -1; o <= 1; o++) {
+                const candidateOctave = startOctaveGuess + o;
+                const candidatePitches = [];
+                const firstNotePc = vl_pc(targetNoteNames[0]);
+                candidatePitches.push(candidateOctave * 12 + firstNotePc);
+
+                for (let i = 1; i < targetNoteNames.length; i++) {
+                    const pc = vl_pc(targetNoteNames[i]);
+                    const prevPitch = candidatePitches[i-1];
+                    let nextPitch = prevPitch - (prevPitch % 12) + pc;
+                    if (nextPitch < prevPitch) {
+                        nextPitch += 12;
+                    }
+                    candidatePitches.push(nextPitch);
+                }
+
+                const avgCandidatePitch = candidatePitches.reduce((a, b) => a + b, 0) / candidatePitches.length;
+                const distance = Math.abs(avgCandidatePitch - avgPrevPitch);
+                
+                if (distance < minTotalDistance) {
+                    minTotalDistance = distance;
+                    bestCandidate = candidatePitches;
+                }
+            }
+            finalPitches = bestCandidate;
+        }
+
+        const MIN_PITCH = 3 * 12; // C3
+        const MAX_PITCH = 6 * 12 + 11; // B6
+
+        while (true) {
+            if (finalPitches.length === 0) break;
+            const maxNote = Math.max(...finalPitches);
+            const minNote = Math.min(...finalPitches);
+
+            if (maxNote > MAX_PITCH) {
+                finalPitches = finalPitches.map(p => p - 12);
+            } else if (minNote < MIN_PITCH) {
+                finalPitches = finalPitches.map(p => p + 12);
+            } else {
+                break;
+            }
+        }
+        
+        return finalPitches;
+    }
+
+
+    function drawPianoVoicing(absolutePitches) {
+        const pianoContainer = document.getElementById('piano-keyboard-container');
+        if (!absolutePitches || absolutePitches.length === 0) {
+            document.querySelectorAll('.piano-key.pressed').forEach(k => k.classList.remove('pressed'));
+            return;
+        }
+
+        const minPitch = Math.min(...absolutePitches);
+        const maxPitch = Math.max(...absolutePitches);
+        
+        let newStartOctave = Math.floor(minPitch / 12);
+        
+        const maxVisiblePitch = (newStartOctave * 12) + (3 * 12) - 1; 
+        if (maxPitch > maxVisiblePitch) {
+            newStartOctave = Math.ceil(maxPitch / 12) - 2;
+        }
+        newStartOctave = Math.max(0, newStartOctave);
+
+        if (newStartOctave !== currentPianoStartOctave) {
+            createPianoKeyboard(pianoContainer, 3, newStartOctave);
+        }
+        
+        document.querySelectorAll('.piano-key.pressed').forEach(k => k.classList.remove('pressed'));
+        absolutePitches.forEach(pitch => {
+            const keyElement = document.querySelector(`.piano-key[data-pitch="${pitch}"]`);
+            if (keyElement) {
+                keyElement.classList.add('pressed');
+            }
+        });
+    }
+
+    function playPianoChord(absolutePitches) {
+        if (!soundsLoaded || !absolutePitches || absolutePitches.length === 0) return;
+        
+        const notesToPlay = absolutePitches.map(pitch => {
+            const octave = Math.floor(pitch / 12);
+            const noteName = noteNamesFromPitch[pitch % 12];
+            return `${noteName}${octave}`;
+        });
+        
+        pianoSampler.triggerAttackRelease(notesToPlay, "1n", Tone.now());
+    }
+
+    // =================================================
+    //          Main Application Logic
+    // =================================================
+    document.addEventListener('DOMContentLoaded', () => {
+        // --- Global App State ---
+        const appState = { 
+            predictHistory: [], 
+            maxHistory: 100, 
+            vlDirState: -1, 
+            currentAbsolutePitches: [],
+            predictionCount: 0,
+            initialVoicingNotes: []
+        };
+
+        // --- UI Element References ---
+        const noteInputs = ['note1','note2','note3','note4'].map(id => document.getElementById(id));
+        const showVoicingButton = document.getElementById('show-voicing-button');
+        const playVoicingButton = document.getElementById('play-voicing-button');
+        const clearButton = document.getElementById('clear-button');
+        const firstButton = document.getElementById('first-button');
+        const predictNextBtn = document.getElementById('predictNext');
+        const predictPrevBtn = document.getElementById('predictPrev');
+        const voicingInfoBox = document.getElementById('voicing-info');
+        const vlIntervalInput = document.getElementById('vlInterval');
+        const vlDirButtons = [document.getElementById('vlDown'), document.getElementById('vlNeutral'), document.getElementById('vlUp')];
+        const scaleRootEl = document.getElementById('scaleRoot');
+        const scaleTypeEl = document.getElementById('scaleType');
+        const cycleEl = document.getElementById('cycle');
+        const chordTypeEl = document.getElementById('chordType');
+        const voicingTypeEl = document.getElementById('voicingTypeSelect');
+        const pianoContainer = document.getElementById('piano-keyboard-container');
+
+        // --- UI Helper Functions ---
+        function setNoteInputsFromArray(arr){ 
+            arr = arr.filter(Boolean); 
+            for(let i=0;i<4;i++){ 
+                const el = noteInputs[i]; 
+                if(el) el.value = arr[i] || ''; 
+            } 
+        }
+        function formatPcNames(pcs){ if(!pcs || pcs.length===0) return ''; return pcs.map(p => (typeof p === 'number') ? vl_nameFromPc(p) : String(p)).join(', '); }
+        function updateVoicingInfo({ title=null, targetDegree=null, targetChordPcs=null, autoFrozen=null, predictedVoicing=null, chordName = null } = {}) { if(!voicingInfoBox) return; const parts = []; if(title) parts.push(`<div class="row"><strong class="label">${title}</strong></div>`); if(chordName) parts.push(`<div class="row"><span class="label">Chord:</span> <span class="mono">${chordName}</span></div>`); if(targetDegree !== null) parts.push(`<div class="row"><span class="label">Target degree:</span> <span class="mono">${targetDegree}</span></div>`); if(targetChordPcs) parts.push(`<div class="row"><span class="label">Target chord tones:</span> <span class="mono">${formatPcNames(targetChordPcs)}</span></div>`); if(autoFrozen && autoFrozen.length) parts.push(`<div class="row"><span class="label">Auto‑Frozen Tones:</span> <span class="mono">${formatPcNames(autoFrozen)}</span></div>`); if(predictedVoicing) parts.push(`<div class="row"><span class="label">Predicted Voicing:</span> <span class="mono">${predictedVoicing.join(', ')}</span></div>`); if(parts.length === 0){ voicingInfoBox.hidden = true; return; } voicingInfoBox.innerHTML = parts.join('') + `<button class="dismiss" aria-label="Dismiss info" title="Dismiss" onclick="this.parentNode.hidden=true">×</button>`; voicingInfoBox.hidden = false; }
+        function setActiveDirection(val){ appState.vlDirState = val; vlDirButtons.forEach(b=>{ if(!b) return; const v = parseInt(b.getAttribute('data-val'),10); b.classList.toggle('active', v === val); b.setAttribute('aria-pressed', String(v===val)); }); }
+        
+        function showCurrentVoicingOnPiano() {
+            if (Tone.context.state !== 'running') {
+                Tone.start();
+            }
+            const notes = noteInputs.map(input => input.value).filter(Boolean);
+
+            if (appState.initialVoicingNotes.length === 0 && notes.length > 0) {
+                appState.initialVoicingNotes = [...notes];
+            }
+
+            const newPitches = resolveAbsolutePitches(notes, []); 
+            appState.currentAbsolutePitches = newPitches;
+            
+            const chordIdentity = vl_identifyChord(notes);
+            let info = {};
+            if (chordIdentity) {
+                info.chordName = `${chordIdentity.root}${chordIdentity.type}`;
+            }
+            updateVoicingInfo(info);
+            
+            drawPianoVoicing(newPitches);
+            playPianoChord(newPitches); 
+        }
+
+        // --- Core App Logic ---
+        function handlePrediction(harmonicDirection) {
+            const prePredictSnapshot = noteInputs.map(n => n.value || '');
+            
+            if (harmonicDirection === 1) { 
+                appState.predictionCount++;
+                 if (appState.initialVoicingNotes.length === 0 && prePredictSnapshot.some(n => n)) {
+                    appState.initialVoicingNotes = [...prePredictSnapshot];
+                }
+            } else if (harmonicDirection === -1 && appState.predictionCount > 0) {
+                appState.predictionCount--;
+            }
+
+            const uiState = {
+                scaleRoot: scaleRootEl.value || 'C',
+                scaleType: (scaleTypeEl.value || 'major').toLowerCase(),
+                cycleVal: parseInt(cycleEl.value,10) || 1,
+                vlInterval: Math.max(0, parseInt(vlIntervalInput.value,10) || 2),
+                vlDir: appState.vlDirState,
+                inputVoices: noteInputs.map(n => vl_normalize(n.value)),
+                chordTypeVal: chordTypeEl ? (chordTypeEl.value || 'triadic_7th') : 'triadic_7th',
+                voicingTypeVal: voicingTypeEl ? (voicingTypeEl.value || 'default_close') : 'default_close',
+                harmonicDirection: harmonicDirection
+            };
+            const result = runPredict(uiState);
+            if (result.error) { updateVoicingInfo({ title: result.error }); return; }
+            
+            if (harmonicDirection === 1) { 
+                if (prePredictSnapshot.some(v => v && v.trim())) { 
+                    appState.predictHistory.push({notes: prePredictSnapshot, pitches: appState.currentAbsolutePitches}); 
+                    if (appState.predictHistory.length > appState.maxHistory) appState.predictHistory.shift(); 
+                    predictPrevBtn.disabled = false; 
+                } 
+            }
+
+            const shouldResetOctave = appState.predictionCount > 0 && appState.predictionCount % 14 === 0;
+
+            const previousPitchesForResolution = shouldResetOctave ? [] : appState.currentAbsolutePitches;
+            
+            const newPitches = resolveAbsolutePitches(result.finalNames, previousPitchesForResolution);
+            appState.currentAbsolutePitches = newPitches;
+            
+            setNoteInputsFromArray(result.finalNames);
+            
+            if (uiState.chordTypeVal === 'triadic_7th' || uiState.chordTypeVal === 'barry-harris-6th-dim') {
+                const predictedChordIdentity = vl_identifyChord(result.finalNames);
+                if (predictedChordIdentity) {
+                    result.info.chordName = `${predictedChordIdentity.root}${predictedChordIdentity.type}`;
+                }
+            }
+
+
+            drawPianoVoicing(newPitches);
+            playPianoChord(newPitches); 
+            updateVoicingInfo(result.info);
+        }
+        function restorePreviousInputs() { 
+            if(appState.predictHistory.length === 0) return; 
+
+            if (appState.predictionCount > 0) {
+                appState.predictionCount--;
+            }
+
+            const lastState = appState.predictHistory.pop(); 
+            setNoteInputsFromArray(lastState.notes);
+            appState.currentAbsolutePitches = lastState.pitches;
+            
+            const chordIdentity = vl_identifyChord(lastState.notes);
+            let info = { title: "Restored previous chord" };
+            if (chordIdentity) {
+                info.chordName = `${chordIdentity.root}${chordIdentity.type}`;
+            }
+            updateVoicingInfo(info);
+
+            drawPianoVoicing(lastState.pitches);
+            playPianoChord(lastState.pitches);
+            predictPrevBtn.disabled = appState.predictHistory.length === 0; 
+        }
+
+        // --- Event Listeners ---
+        showVoicingButton.addEventListener('click', showCurrentVoicingOnPiano);
+        playVoicingButton.addEventListener('click', () => { if (appState.currentAbsolutePitches.length > 0) { playPianoChord(appState.currentAbsolutePitches); } });
+        
+        clearButton.addEventListener('click', () => {
+            setNoteInputsFromArray([]);
+            appState.currentAbsolutePitches = [];
+            appState.initialVoicingNotes = [];
+            appState.predictionCount = 0;
+            appState.predictHistory = [];
+            predictPrevBtn.disabled = true;
+            drawPianoVoicing([]);
+            updateVoicingInfo();
+        });
+
+        firstButton.addEventListener('click', () => {
+            if (appState.initialVoicingNotes.length > 0) {
+                setNoteInputsFromArray(appState.initialVoicingNotes);
+                appState.predictionCount = 0;
+                appState.predictHistory = [];
+                predictPrevBtn.disabled = true;
+                showCurrentVoicingOnPiano();
+            }
+        });
+
+        predictNextBtn.addEventListener('click', () => {
+            if (Tone.context.state !== 'running') {
+                Tone.start();
+            }
+            handlePrediction(1);
+        });
+        
+        predictPrevBtn.addEventListener('click', () => {
+             if (Tone.context.state !== 'running') {
+                Tone.start();
+            }
+            restorePreviousInputs();
+        });
+
+        window.addEventListener('keydown', (e) => {
+            if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'SELECT') return;
+
+            if (e.key === 'ArrowRight') {
+                predictNextBtn.click();
+            } else if (e.key === 'ArrowLeft') {
+                predictPrevBtn.click();
+            }
+        });
+
+        vlDirButtons.forEach(b=>{ if(b) b.addEventListener('click', ()=> setActiveDirection(parseInt(b.getAttribute('data-val'),10))); });
+        noteInputs.forEach(el=>{ if(!el) return; el.addEventListener('blur', ()=> { el.value = vl_normalize(el.value); }); el.addEventListener('keydown', (e)=> { if(e.key==='Enter'){ el.blur(); e.preventDefault(); } }); });
+        
+        chordTypeEl.addEventListener('change', (e) => {
+            const isBarryHarrisMode = e.target.value === 'barry-harris-6th-dim';
+            cycleEl.disabled = isBarryHarrisMode;
+            vlDirButtons.forEach(b => b.disabled = isBarryHarrisMode);
+        });
+        
+        scaleRootEl.addEventListener('change', (e) => {
+            if (Tone.context.state !== 'running') {
+                Tone.start();
+            }
+            const newRoot = e.target.value;
+            const oldRoot = appState.currentRoot || 'C';
+            
+            const oldPc = vl_pc(oldRoot);
+            const newPc = vl_pc(newRoot);
+            
+            if (oldPc === -1 || newPc === -1) {
+                appState.currentRoot = newRoot;
+                return;
+            }
+            
+            const interval = newPc - oldPc;
+            
+            const currentNotes = noteInputs.map(input => input.value);
+            const transposedNotes = currentNotes.map(note => {
+                if (!note) return '';
+                const currentNotePc = vl_pc(note);
+                if (currentNotePc === -1) return note;
+                const newNotePc = (currentNotePc + interval + 12) % 12;
+                return vl_nameFromPc(newNotePc);
+            });
+            
+            setNoteInputsFromArray(transposedNotes);
+            showCurrentVoicingOnPiano();
+            
+            appState.currentRoot = newRoot;
+        });
+
+
+        // --- Initial Load ---
+        appState.currentRoot = scaleRootEl.value;
+        playVoicingButton.disabled = true;
+        playVoicingButton.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>&nbsp;&nbsp;Loading Sounds...';
+
+        setupPianoSampler(() => {
+            playVoicingButton.disabled = false;
+            playVoicingButton.innerHTML = '<i class="fa-solid fa-play"></i>&nbsp;&nbsp;Play Chord';
+            console.log("Piano samples loaded.");
+        });
+
+        createPianoKeyboard(pianoContainer, 3, 3);
+        setActiveDirection(-1);
+        predictPrevBtn.disabled = true;
+    });
+    </script>
+</body>
+</html>
+
