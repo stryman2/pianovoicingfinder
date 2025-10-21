@@ -1,4 +1,3 @@
-<!-- copyright 2025 Alon Segal -->
 <!DOCTYPE html>
 <html lang="en" dir="ltr">
 <head>
@@ -74,7 +73,7 @@
             background: linear-gradient(90deg,var(--accent-1), var(--accent-2)); color:#06202b;
             box-shadow: 0 10px 30px rgba(56,189,248,0.12), 0 4px 0 rgba(0,0,0,0.25);
         }
-        .current-voicing{ display:flex; align-items:center; justify-content:center; gap:16px; margin:10px 0 18px 0; flex-wrap:nowrap; }
+        .current-voicing{ display:flex; align-items:center; justify-content:center; gap:16px; margin:10px 0 10px 0; flex-wrap:nowrap; }
         .note-square{
             width:76px;height:76px; min-width:76px; border-radius:14px; background:var(--note-white); color:#0b1220;
             font-weight:900; font-size:28px; display:inline-flex; align-items:center; justify-content:center;
@@ -91,6 +90,32 @@
         .side-btn.prev-btn{ background: linear-gradient(180deg,#3f8fb0,#165a78); }
         .side-btn.next-btn{ background: linear-gradient(180deg,#00b37a,#0e7b5e); }
         .side-btn:hover{ transform:translateY(-4px); filter:brightness(1.03); }
+        
+        .generate-container {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+        #generate-voicing-button {
+            width: 40%;
+            max-width: 348px;
+            height: 36px;
+            font-size: 14px;
+            border-radius: 10px;
+            background: linear-gradient(90deg, var(--accent-3), var(--accent-2));
+            color: #061222;
+            border: 0;
+            cursor: pointer;
+            font-weight: 800;
+            letter-spacing: 0.4px;
+            box-shadow: 0 10px 26px rgba(2,6,18,0.45);
+            transition: all var(--transition);
+        }
+        #generate-voicing-button:hover {
+            transform: translateY(-4px);
+            filter: brightness(1.04);
+        }
+
         .button-container{ 
             display:flex; gap:14px; justify-content:center; align-items:center;
             flex-wrap:wrap; margin-bottom:18px; 
@@ -105,7 +130,12 @@
         #show-voicing-button{ background: linear-gradient(90deg,var(--accent-1), var(--accent-2)); color:#042427; }
         #play-voicing-button{ background: linear-gradient(90deg,#ff9a8b,#ff6a88); color:#000; }
         
-        .small-button-group { display: flex; flex-direction: column; gap: 8px; }
+        .small-button-group { 
+            display: flex; 
+            flex-direction: row-reverse; 
+            gap: 8px; 
+            align-items: center;
+        }
         .small-btn {
             height: 24px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--glass-border);
             background: linear-gradient(180deg,#2b2f36,#1b1f24); color: var(--text-on-dark);
@@ -289,6 +319,12 @@
             <input type="text" id="note3" class="note-square" placeholder="E" aria-label="Note 3">
             <input type="text" id="note4" class="note-square" placeholder="A" aria-label="Note 4">
             <button id="predictNext" class="side-btn next-btn" aria-label="Next Chord">Next ▶</button>
+        </div>
+
+        <div class="generate-container">
+            <button id="generate-voicing-button">
+                <i class="fa-solid fa-wand-magic-sparkles"></i>&nbsp;&nbsp;Generate Voicing
+            </button>
         </div>
 
         <div class="button-container" role="group" aria-label="Actions">
@@ -535,6 +571,7 @@
         const playVoicingButton = document.getElementById('play-voicing-button');
         const clearButton = document.getElementById('clear-button');
         const firstButton = document.getElementById('first-button');
+        const generateButton = document.getElementById('generate-voicing-button');
         const predictNextBtn = document.getElementById('predictNext');
         const predictPrevBtn = document.getElementById('predictPrev');
         const voicingInfoBox = document.getElementById('voicing-info');
@@ -584,6 +621,52 @@
         }
 
         // --- Core App Logic ---
+        function generateInitialVoicing() {
+            const scaleRoot = scaleRootEl.value || 'C';
+            const scaleType = (scaleTypeEl.value || 'major').toLowerCase();
+            const chordType = chordTypeEl.value;
+            let generatedNotes = [];
+
+            if (chordType === 'triadic_7th') {
+                const possibleDegrees = [1, 2, 4, 6]; // I, ii, IV, vi
+                const randomDegree = possibleDegrees[Math.floor(Math.random() * possibleDegrees.length)];
+                const chordFamily = (Math.random() > 0.5) ? '7th' : 'triad';
+                const pcs = vl_diatonicChordPcs(scaleRoot, scaleType, randomDegree, chordFamily);
+                if (pcs) { generatedNotes = pcs.map(vl_nameFromPc); }
+            } else {
+                switch(chordType) {
+                    case 'barry-harris-6th-dim': {
+                        const isMajor = scaleType.includes('major');
+                        const tonicChordType = isMajor ? 'maj6' : 'min6';
+                        const structure = vl_chordStructures[tonicChordType];
+                        if (structure) { generatedNotes = structure.map(i => vl_nameFromPc(vl_pc(scaleRoot) + i)); }
+                        break;
+                    }
+                    case '3_part_4ths': generatedNotes = buildQuartalChord(scaleRoot, scaleType, 3); break;
+                    case '4_part_4ths': generatedNotes = buildQuartalChord(scaleRoot, scaleType, 4); break;
+                    case 'tbn_1': {
+                        const pcs = vl_diatonicChordPcs(scaleRoot, scaleType, 1, 'triad');
+                        if (pcs) { generatedNotes = pcs.map(vl_nameFromPc); }
+                        break;
+                    }
+                    default: {
+                         const pcs = vl_diatonicChordPcs(scaleRoot, scaleType, 1, '7th');
+                         if (pcs) { generatedNotes = pcs.map(vl_nameFromPc); }
+                        break;
+                    }
+                }
+            }
+
+            if (generatedNotes.length > 0) {
+                setNoteInputsFromArray(generatedNotes);
+                appState.initialVoicingNotes = [...generatedNotes];
+                appState.predictionCount = 0;
+                appState.predictHistory = [];
+                predictPrevBtn.disabled = true;
+                showCurrentVoicingOnPiano();
+            }
+        }
+
         function handlePrediction(harmonicDirection) {
             const prePredictSnapshot = noteInputs.map(n => n.value || '');
             
@@ -665,6 +748,7 @@
         // --- Event Listeners ---
         showVoicingButton.addEventListener('click', showCurrentVoicingOnPiano);
         playVoicingButton.addEventListener('click', () => { if (appState.currentAbsolutePitches.length > 0) { playPianoChord(appState.currentAbsolutePitches); } });
+        generateButton.addEventListener('click', generateInitialVoicing);
         
         clearButton.addEventListener('click', () => {
             setNoteInputsFromArray([]);
