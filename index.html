@@ -1,4 +1,3 @@
-<!-- copyright 2025 Alon Segal -->
 <!DOCTYPE html>
 <html lang="en" dir="ltr">
 <head>
@@ -628,13 +627,12 @@
             const chordType = chordTypeEl.value;
             let generatedNotes = [];
 
-            if (chordType === 'triadic_7th') {
-                const possibleDegrees = [1, 2, 4, 6]; // I, ii, IV, vi
-                const randomDegree = possibleDegrees[Math.floor(Math.random() * possibleDegrees.length)];
-                const chordFamily = (Math.random() > 0.5) ? '7th' : 'triad';
-                const pcs = vl_diatonicChordPcs(scaleRoot, scaleType, randomDegree, chordFamily);
-                if (pcs) { generatedNotes = pcs.map(vl_nameFromPc); }
-            } else {
+             if (chordType === 'triadic_7th') {
+                 // Always generate the tonic 7th chord
+                 const pcs = vl_diatonicChordPcs(scaleRoot, scaleType, 1, '7th');
+                 if (pcs) { generatedNotes = pcs.map(vl_nameFromPc); }
+             } else {
+                 // Keep specific logic for other modes
                 switch(chordType) {
                     case 'barry-harris-6th-dim': {
                         const isMajor = scaleType.includes('major');
@@ -650,7 +648,7 @@
                         if (pcs) { generatedNotes = pcs.map(vl_nameFromPc); }
                         break;
                     }
-                    default: {
+                    default: { // Fallback for safety, should hit the triadic_7th case above
                          const pcs = vl_diatonicChordPcs(scaleRoot, scaleType, 1, '7th');
                          if (pcs) { generatedNotes = pcs.map(vl_nameFromPc); }
                         break;
@@ -802,6 +800,8 @@
         chordTypeEl.addEventListener('change', (e) => {
             const isBarryHarrisMode = e.target.value === 'barry-harris-6th-dim';
             cycleEl.disabled = isBarryHarrisMode;
+            // Also disable vlInterval and vlDirButtons for Barry Harris mode
+            vlIntervalInput.disabled = isBarryHarrisMode; 
             vlDirButtons.forEach(b => b.disabled = isBarryHarrisMode);
         });
         
@@ -852,9 +852,15 @@
         createPianoKeyboard(pianoContainer, 3, 3);
         setActiveDirection(-1);
         predictPrevBtn.disabled = true;
+        
+        // Initial check for Barry Harris mode disable state
+        const initialIsBarryHarrisMode = chordTypeEl.value === 'barry-harris-6th-dim';
+        cycleEl.disabled = initialIsBarryHarrisMode;
+        vlIntervalInput.disabled = initialIsBarryHarrisMode; 
+        vlDirButtons.forEach(b => b.disabled = initialIsBarryHarrisMode);
+
     });
     </script>
 </body>
 </html>
-
 
